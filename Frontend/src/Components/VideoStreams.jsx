@@ -1,8 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { createSocket } from "../Api/ws";
+import { getSocket } from "../Api/ws";
 import { useSelector } from "react-redux";
-
 // ── Grid Config ────────────────────────────────────────────────────────────
 function getGridConfig(n) {
   if (n === 1) return { cols: 1, rows: 1 };
@@ -391,6 +390,296 @@ const ScreenViewer = ({
   );
 };
 
+// ── Whiteboard Canvas ──────────────────────────────────────────────────────
+const PALETTE = ["#1a1a1a", "#ffffff", "#f97316", "#facc15", "#34d399", "#60a5fa", "#f472b6", "#f87171"];
+
+const WhiteboardCanvas = ({ socket, roomcode, isOwner }) => {
+  const canvasRef = useRef(null);
+  const drawing = useRef(false);
+  const lastPos = useRef(null);
+  const [tool, setTool] = useState("pen");
+  const [color, setColor] = useState("#1a1a1a");
+  const [lineWidth, setLineWidth] = useState(3);
+
+  const getPos = (e, canvas) => {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const src = e.touches ? e.touches[0] : e;
+    return {
+      x: (src.clientX - rect.left) * scaleX,
+      y: (src.clientY - rect.top) * scaleY,
+    };
+  };
+
+  const drawLine = useCallback((ctx, from, to, strokeColor, width, erasing) => {
+    ctx.save();
+    ctx.globalCompositeOperation = erasing ? "destination-out" : "source-over";
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = width;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(to.x, to.y);
+    ctx.stroke();
+    ctx.restore();
+  }, []);
+
+  // Receive remote draw events
+  useEffect(() => {
+    if (!socket) return;
+    const handleDraw = ({ from, to, color: c, lineWidth: lw, erasing }) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      drawLine(canvas.getContext("2d"), from, to, c, lw, erasing);
+    };
+    const handleClear = () => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      // Re-fill white background
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    };
+    socket.on("whiteboard-draw", handleDraw);
+    socket.on("whiteboard-clear", handleClear);
+    return () => {
+      socket.off("whiteboard-draw", handleDraw);
+      socket.off("whiteboard-clear", handleClear);
+    };
+  }, [socket, drawLine]);
+
+  // Fill white on mount
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }, []);
+
+  const startDraw = (e) => {
+    e.preventDefault();
+    drawing.current = true;
+    lastPos.current = getPos(e.nativeEvent ?? e, canvasRef.current);
+  };
+
+  const moveDraw = (e) => {
+    e.preventDefault();
+    if (!drawing.current || !lastPos.current) return;
+    const canvas = canvasRef.current;
+    const pos = getPos(e.nativeEvent ?? e, canvas);
+    const erasing = tool === "eraser";
+    const strokeColor = erasing ? "#ffffff" : color;
+    const strokeWidth = erasing ? lineWidth * 6 : lineWidth;
+    drawLine(canvas.getContext("2d"), lastPos.current, pos, strokeColor, strokeWidth, false);
+    socket?.emit("whiteboard-draw", {
+      roomcode,
+      from: lastPos.current,
+      to: pos,
+      color: strokeColor,
+      lineWidth: strokeWidth,
+      erasing: false,
+    });
+    lastPos.current = pos;
+  };
+
+  const endDraw = () => { drawing.current = false; lastPos.current = null; };
+
+  const clearBoard = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    socket?.emit("whiteboard-clear", { roomcode });
+  };
+
+  const WIDTHS = [2, 4, 8];
+
+  return (
+    <div className="relative w-full h-full bg-[#0d0d0d] rounded-xl sm:rounded-2xl overflow-hidden border border-white/[0.06] flex flex-col">
+      {/* ── Toolbar ── */}
+      <div className="flex-shrink-0 flex items-center gap-2 px-3 py-2 bg-[#1a1a1a]/95 border-b border-white/[0.06] flex-wrap">
+        {/* Tool buttons */}
+        <div className="flex gap-1">
+          {[
+            { id: "pen",    label: "✏️" },
+            { id: "eraser", label: "⬜" },
+          ].map(({ id, label }) => (
+            <button
+              key={id}
+              onClick={() => setTool(id)}
+              title={id.charAt(0).toUpperCase() + id.slice(1)}
+              className={`w-8 h-8 rounded-lg text-sm border transition-all duration-150 ${
+                tool === id
+                  ? "bg-orange-500 border-orange-500 text-white"
+                  : "bg-white/[0.05] border-white/10 text-white/60 hover:bg-white/10"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Divider */}
+        <div className="w-px h-5 bg-white/10" />
+
+        {/* Palette */}
+        <div className="flex gap-1 items-center">
+          {PALETTE.map((c) => (
+            <button
+              key={c}
+              onClick={() => { setColor(c); setTool("pen"); }}
+              className="rounded-full transition-all duration-150 flex-shrink-0"
+              style={{
+                width: 18,
+                height: 18,
+                background: c,
+                outline: color === c && tool === "pen" ? "2px solid #f97316" : "2px solid transparent",
+                outlineOffset: 1,
+                border: c === "#ffffff" ? "1px solid #ffffff30" : "none",
+                transform: color === c && tool === "pen" ? "scale(1.2)" : "scale(1)",
+              }}
+            />
+          ))}
+          <input
+            type="color"
+            value={color}
+            onChange={(e) => { setColor(e.target.value); setTool("pen"); }}
+            className="w-5 h-5 rounded cursor-pointer bg-transparent border-0 p-0 ml-0.5"
+            title="Custom color"
+          />
+        </div>
+
+        {/* Divider */}
+        <div className="w-px h-5 bg-white/10" />
+
+        {/* Stroke widths */}
+        <div className="flex items-center gap-1.5">
+          {WIDTHS.map((w) => (
+            <button
+              key={w}
+              onClick={() => setLineWidth(w)}
+              title={`${w}px`}
+              className={`rounded-full flex items-center justify-center transition-all border ${
+                lineWidth === w ? "border-orange-500" : "border-white/10"
+              } bg-white/[0.04] hover:bg-white/10`}
+              style={{ width: 22, height: 22 }}
+            >
+              <div
+                className="rounded-full"
+                style={{
+                  width: w + 2,
+                  height: w + 2,
+                  background: lineWidth === w ? "#f97316" : "rgba(255,255,255,0.5)",
+                }}
+              />
+            </button>
+          ))}
+        </div>
+
+        {/* Clear — owner only */}
+        {isOwner && (
+          <>
+            <div className="w-px h-5 bg-white/10 ml-auto" />
+            <button
+              onClick={clearBoard}
+              className="px-3 py-1 rounded-lg text-xs font-semibold border bg-red-500/15 border-red-500/30 text-red-400 hover:bg-red-500/25 transition-all"
+            >
+              Clear
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* ── Canvas ── */}
+      <div className="flex-1 min-h-0 overflow-hidden">
+        <canvas
+          ref={canvasRef}
+          width={1920}
+          height={1080}
+          className="w-full h-full"
+          style={{
+            cursor: tool === "eraser" ? "cell" : "crosshair",
+            touchAction: "none",
+            display: "block",
+          }}
+          onMouseDown={startDraw}
+          onMouseMove={moveDraw}
+          onMouseUp={endDraw}
+          onMouseLeave={endDraw}
+          onTouchStart={startDraw}
+          onTouchMove={moveDraw}
+          onTouchEnd={endDraw}
+        />
+      </div>
+
+      {/* Badge */}
+      <div className="absolute top-[52px] left-2 flex items-center gap-1.5 bg-black/55 backdrop-blur-sm rounded-lg px-2 py-1 pointer-events-none">
+        <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse" />
+        <span className="text-white/90 text-[10px] sm:text-xs font-medium">
+          Whiteboard
+        </span>
+      </div>
+    </div>
+  );
+};
+
+// ── Camera Sidebar (shared between screen share and whiteboard) ────────────
+const CameraSidebar = ({
+  sidebarWidth,
+  localVideoRef,
+  camOn,
+  micOn,
+  myName,
+  isMobile,
+  remoteUserIds,
+  remoteStreams,
+  peerStates,
+  streamVersions,
+}) => (
+  <div
+    className="flex-shrink-0 flex flex-col gap-1.5 sm:gap-2 overflow-y-auto overflow-x-hidden py-0.5"
+    style={{ width: sidebarWidth }}
+  >
+    {/* My tile */}
+    <div
+      className="relative w-full flex-shrink-0 bg-[#1e1e1e] rounded-xl overflow-hidden border border-white/[0.05]"
+      style={{ aspectRatio: "1 / 1" }}
+    >
+      <video
+        ref={localVideoRef}
+        autoPlay
+        playsInline
+        muted
+        className={`w-full h-full object-cover transition-opacity duration-300 scale-x-[-1] ${!camOn ? "opacity-0" : "opacity-100"}`}
+      />
+      {!camOn && <AvatarPlaceholder name={myName} small />}
+      <TileOverlay displayName="You" micOn={micOn} small />
+    </div>
+
+    {/* Remote tiles */}
+    {remoteUserIds.map((userId) => (
+      <div
+        key={userId}
+        className="relative w-full flex-shrink-0"
+        style={{ aspectRatio: "1 / 1" }}
+      >
+        <RemoteVideo
+          userId={userId}
+          streamRef={remoteStreams}
+          peerStates={peerStates}
+          small
+          streamVersion={streamVersions[userId] || 0}
+        />
+      </div>
+    ))}
+  </div>
+);
+
 // ══════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ══════════════════════════════════════════════════════════════════════════
@@ -408,8 +697,6 @@ export function VideoStream() {
   const localScreenStreamRef = useRef(null);
   const screenVideoRef = useRef(null);
 
-
-  const [wb, setWb] = useState(false);
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
   const [screenSharing, setScreenSharing] = useState(false);
@@ -417,6 +704,7 @@ export function VideoStream() {
   const [remoteUserIds, setRemoteUserIds] = useState([]);
   const [peerStates, setPeerStates] = useState({});
   const [streamVersions, setStreamVersions] = useState({});
+  const [whiteboard, setWhiteboard] = useState(false);
 
   const myName = useSelector((store) => store.User.name || "You");
   const users = useSelector((store) => store.User.users);
@@ -437,7 +725,7 @@ export function VideoStream() {
       el.srcObject = stream;
       el.play().catch(() => {});
     }
-  }, [totalParticipants, anyoneSharing]);
+  }, [totalParticipants, anyoneSharing, whiteboard]);
 
   const toggleMic = () => {
     const newVal = !micOn;
@@ -457,7 +745,7 @@ export function VideoStream() {
     socketRef.current?.emit("media-state", { roomcode, micOn, camOn: newVal });
   };
 
-  const toggleScreenShare = useCallback(async () => {
+  async function toggleScreenShare() {
     if (screenSharing) {
       localScreenStreamRef.current?.getTracks().forEach((t) => t.stop());
       localScreenStreamRef.current = null;
@@ -479,7 +767,7 @@ export function VideoStream() {
         roomcode,
         sharing: false,
       });
-      
+
       setCamOn(true);
       socketRef.current?.emit("media-state", { roomcode, micOn, camOn: true });
       setScreenSharing(false);
@@ -507,7 +795,7 @@ export function VideoStream() {
     } catch (err) {
       console.error("[ScreenShare] FAILED:", err.name, err.message);
     }
-  }, [screenSharing, roomcode]);
+  }
 
   const getUserMediaStream = useCallback(async () => {
     try {
@@ -539,12 +827,31 @@ export function VideoStream() {
     }
   }, []);
 
+  const handleWhiteboardEvent = (data) => {
+    if (data?.data !== undefined) {
+      setWhiteboard(Boolean(data.data));
+    } else {
+      setWhiteboard((prev) => !prev);
+    }
+  };
+
+  const toggleWhiteboard = () => {
+    const next = !whiteboard;
+    setWhiteboard(next);
+    const socket = socketRef.current || getSocket();
+    socket?.emit("whiteboard", {
+      roomcode,
+      message: next ? "white board open" : "white board closed",
+      data: next,
+    });
+  };
+
   useEffect(() => {
     let isMounted = true;
     const setup = async () => {
       const stream = await getUserMediaStream();
       if (!stream || !isMounted) return;
-      const socket = createSocket();
+      const socket = getSocket();
       if (!socket) return;
       socketRef.current = socket;
 
@@ -611,6 +918,7 @@ export function VideoStream() {
           to: userId,
         });
       };
+
       const handleVideoCall = async ({ from, offer }) => {
         const peer = createPeer(from);
         peersRef.current[from] = peer;
@@ -640,13 +948,12 @@ export function VideoStream() {
           iceBufRef.current[from].push(candidate);
         }
       };
+
       const handleUserLeft = ({ userId }) => {
-        console.log(users);
         if (peersRef.current[userId]) {
           peersRef.current[userId].close();
           delete peersRef.current[userId];
         }
-        console.log(users);
         delete remoteStreams.current[userId];
         setRemoteUserIds((prev) => prev.filter((id) => id !== userId));
         setPeerStates((prev) => {
@@ -680,6 +987,7 @@ export function VideoStream() {
       socket.on("media-state", handleMediaState);
       socket.on("userLeft", handleUserLeft);
       socket.on("screen-share-state", handleScreenShareState);
+      socket.on("whiteboard", handleWhiteboardEvent);
       socket.emit("user-ready-rtc", { roomcode });
 
       cleanupRef.current = () => {
@@ -689,6 +997,7 @@ export function VideoStream() {
         socket.off("ice-candidate", handleIceCandidate);
         socket.off("media-state", handleMediaState);
         socket.off("userLeft", handleUserLeft);
+        socket.off("whiteboard", handleWhiteboardEvent);
         socket.off("screen-share-state", handleScreenShareState);
         Object.values(peersRef.current).forEach((p) => p.close());
         peersRef.current = {};
@@ -715,21 +1024,31 @@ export function VideoStream() {
   // ── Sidebar width responsive ──
   const sidebarWidth = isMobile ? "100px" : "168px";
 
+  // Shared sidebar props
+  const sidebarProps = {
+    sidebarWidth,
+    localVideoRef,
+    camOn,
+    micOn,
+    myName,
+    isMobile,
+    remoteUserIds,
+    remoteStreams,
+    peerStates,
+    streamVersions,
+  };
+
   // ══════════════════════════════════════════════════════════════════════
   // RENDER
   // ══════════════════════════════════════════════════════════════════════
-  const handlewhiteboard = () => {
-         setWb((p) => !p)
-setScreenSharing((p) => !p);
-        }
   return (
     <div className="w-full h-full min-h-0 flex flex-col overflow-hidden rounded-2xl sm:rounded-3xl bg-[#111111]">
       {/* ── Video Area ── */}
       <div className="flex-1 min-h-0 overflow-hidden">
-        {/* ═══════════════════════ SCREEN SHARE LAYOUT ═══════════════════════ */}
+
+        {/* ═══════════════ SCREEN SHARE LAYOUT ═══════════════ */}
         {anyoneSharing ? (
           <div className="w-full h-full flex p-1.5 sm:p-2 gap-1.5 sm:gap-2">
-            {/* Screen tile */}
             <div className="flex-1 min-w-0 min-h-0">
               <ScreenViewer
                 isLocalShare={screenSharing}
@@ -738,48 +1057,26 @@ setScreenSharing((p) => !p);
                 presenterName={getPresenterName(remoteScreenInfo?.userId)}
               />
             </div>
-
-            {/* Right sidebar — square tiles */}
-            <div
-              className="flex-shrink-0 flex flex-col gap-1.5 sm:gap-2 overflow-y-auto overflow-x-hidden py-0.5"
-              style={{ width: sidebarWidth }}
-            >
-              {/* My camera */}
-              <div
-                className="relative w-full flex-shrink-0 bg-[#1e1e1e] rounded-xl overflow-hidden border border-white/[0.05]"
-                style={{ aspectRatio: "1 / 1" }}
-              >
-                <video
-                  ref={localVideoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className={`w-full h-full object-cover transition-opacity duration-300 scale-x-[-1] ${!camOn ? "opacity-0" : "opacity-100"}`}
-                />
-                {!camOn && <AvatarPlaceholder name={myName} small />}
-                <TileOverlay displayName="You" micOn={micOn} small={isMobile} />
-              </div>
-
-              {/* Remote cameras */}
-              {remoteUserIds.map((userId) => (
-                <div
-                  key={userId}
-                  className="relative w-full flex-shrink-0"
-                  style={{ aspectRatio: "1 / 1" }}
-                >
-                  <RemoteVideo
-                    userId={userId}
-                    streamRef={remoteStreams}
-                    peerStates={peerStates}
-                    small
-                    streamVersion={streamVersions[userId] || 0}
-                  />
-                </div>
-              ))}
-            </div>
+            <CameraSidebar {...sidebarProps} />
           </div>
+
+        /* ═══════════════ WHITEBOARD LAYOUT ═══════════════ */
+        ) : whiteboard ? (
+          <div className="w-full h-full flex p-1.5 sm:p-2 gap-1.5 sm:gap-2">
+            {/* Whiteboard canvas — takes remaining space */}
+            <div className="flex-1 min-w-0 min-h-0">
+              <WhiteboardCanvas
+                socket={socketRef.current}
+                roomcode={roomcode}
+                isOwner={role === "Owner"}
+              />
+            </div>
+            {/* Camera strip — same as screen share */}
+            <CameraSidebar {...sidebarProps} />
+          </div>
+
+        /* ═══════════════ NORMAL GRID LAYOUT ═══════════════ */
         ) : (
-          /* ═══════════════════════ NORMAL GRID LAYOUT ═══════════════════════ */
           <div className="w-full h-full flex items-center justify-center p-1.5 sm:p-2">
             {totalParticipants === 1 ? (
               // Solo — centred square
@@ -855,14 +1152,12 @@ setScreenSharing((p) => !p);
       </div>
 
       {/* ── Control Bar ── */}
-      {/* Mobile: larger touch targets, pill shape, floating look */}
       <div className="flex-shrink-0 flex items-center justify-center gap-2 sm:gap-3 py-3 sm:py-2.5 px-4 border-t border-white/[0.05] bg-[#1a1a1a]/80 backdrop-blur-sm">
-        {/* white board*/}
-       
-
-           {role == "Owner" ? (<WhiteboardBtn active={wb} onClick={handlewhiteboard} />) : (<div> </div>)}
-        
-
+        {role === "Owner" ? (
+          <WhiteboardBtn active={whiteboard} onClick={toggleWhiteboard} />
+        ) : (
+          <div />
+        )}
 
         <ControlBtn
           onClick={toggleMic}
@@ -878,7 +1173,6 @@ setScreenSharing((p) => !p);
         >
           {camOn ? <CamIcon /> : <CamOffIcon />}
         </ControlBtn>
-        {/* Screen share — hide on mobile since getDisplayMedia not supported on most mobile browsers */}
         {!isMobile && (
           <ControlBtn
             onClick={toggleScreenShare}
