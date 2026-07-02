@@ -3,7 +3,6 @@ const roomUsers: Record<
   { name: string; role: string; userId: string }[]
 > = {};
 
-
 export function socketcontroller(io: any) {
   console.log("socket setup");
 
@@ -151,6 +150,21 @@ export function socketcontroller(io: any) {
       });
     });
 
+    socket.on("whiteboard", (data: any) => {
+      console.log("whiteboard", data);
+      if (data?.roomcode) {
+        socket.to(data.roomcode).emit("whiteboard", {
+          from: socket.id,
+          ...data,
+        });
+      }
+    });
+    socket.on("whiteboard-draw", (data) =>
+      socket.to(data.roomcode).emit("whiteboard-draw", data),
+    );
+    socket.on("whiteboard-clear", (data) =>
+      socket.to(data.roomcode).emit("whiteboard-clear", data),
+    );
     socket.on("disconnect", (reason: any) => {
       console.log("Disconnected:", socket.id, reason);
 
