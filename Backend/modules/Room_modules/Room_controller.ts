@@ -177,7 +177,7 @@ export const storechat = async (req: Request, res: Response) => {
     const dataKey = `room:${roomcode}:messages`;
     const ttlKey = `room:${roomcode}:messages:ttl`;
     const encryptedchat = encrypt(chat);
-
+    console.log(encryptedchat)
     const message = {
       encryptedchat,
       name,
