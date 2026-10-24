@@ -132,6 +132,22 @@ export function socketcontroller(io: any) {
     });
 
     // ── Room management ─────────────────────────────────────────────────────
+// Inside your io.on("connection", (socket) => { ... }) block:
+
+socket.on("toggle-room-protection", (data) => {
+  try {
+    const { room, protectedMode } = data;
+    
+    if (!room) return;
+
+    // Broadcast the new protection setting to everyone else connected in the room
+    socket.to(room).emit("room-protection-updated", { protectedMode });
+    
+    console.log(`[Socket] Room ${room} protection mode altered to: ${protectedMode}`);
+  } catch (err) {
+    console.error("[Socket Event Error: toggle-room-protection]", err);
+  }
+});
 
     socket.on("rejectJoinRequest", (data: any) => {
       io.to(data.userId).emit("requestRejected");

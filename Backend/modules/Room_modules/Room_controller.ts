@@ -265,4 +265,43 @@ export const getchat = async (req: Request, res: Response) => {
 };
 
 
+
+export const updateRoomProtection = async (req: Request, res: Response) => {
+  try {
+    const { roomcode } = req.params;
+    const { protectedMode } = req.body;
+    const userId = req.user?.id; // Assumes your authentication middleware sets req.user
+
+    if (!roomcode) {
+      return res.status(400).json({ message: "Room code is required." });
+    }
+
+    if (typeof protectedMode !== "boolean") {
+      return res.status(400).json({ message: "Invalid protectedMode payload." });
+    }
+
+    // Find the room and verify the requester is the actual host/owner
+    const room = await Room.findOne({ roomcode });
+    if (!room) {
+      return res.status(404).json({ message: "Room not found." });
+    }
+
+    if (room.host.toString() !== userId) {
+      return res.status(403).json({ message: "Unauthorized: Only the host can toggle protection." });
+    }
+
+    // Update the room state
+    room.protectedMode = protectedMode;
+    await room.save();
+
+    return res.status(200).json({ 
+      message: "Room protection updated successfully.", 
+      protectedMode: room.protectedMode 
+    });
+  } catch (err) {
+    console.error("[updateRoomProtection]", err);
+    return res.status(500).json({ message: "Error updating room protection status." });
+  }
+};
+
 //kjjGSSkWJI

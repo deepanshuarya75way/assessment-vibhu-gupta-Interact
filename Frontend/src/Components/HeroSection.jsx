@@ -3,7 +3,7 @@ import api from "../Api/axios";
 import { useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 import { AskName } from "./AskName";
-import { setName, setRole} from "../Redux/Features/UserSlice";
+import { setName, setRole } from "../Redux/Features/UserSlice";
 
 export default function HeroSection() {
   const [error, setError] = useState("");
@@ -11,14 +11,14 @@ export default function HeroSection() {
   const [roomcode, setRoomcode] = useState("");
   const [message, setMessage] = useState("");
   const [showAskName, setShowAskName] = useState(false);
-  
+
   const [isprotected, setIsprotected] = useState(false);
   const [tempRoomcode, setTempRoomcode] = useState("");
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const name = useSelector((store) => store.User.name);
   const userid = useSelector((store) => store.User.userId);
-  
+
   useEffect(() => {
     if (name && showAskName && tempRoomcode) {
       setTimeout(() => {
@@ -30,19 +30,18 @@ export default function HeroSection() {
   }, [name, showAskName, tempRoomcode, navigate]);
 
   useEffect(() => {
-     dispatch((setName(null)))
-  } , [])
+    dispatch((setName(null)))
+  }, [])
 
   const createRoom = async () => {
     try {
       setError("");
       setLoading(true);
-      // ✅ Matches backend destructured variable key: roomisprotected
-      const { data } = await api.post("/room/api/createroom" , { roomisprotected: isprotected });
-      
-      if (data.isActive === true) {
-        dispatch(setRole("Owner"));
-      }
+      const { data } = await api.post("/room/api/createroom", { roomisprotected: isprotected });
+
+      // ✅ FIX: Set Owner role immediately upon room creation
+      dispatch(setRole("Owner"));
+
       setTempRoomcode(data.roomcode);
       navigate(`/${data.roomcode}`);
     } catch (err) {
@@ -54,10 +53,10 @@ export default function HeroSection() {
     }
   };
 
-  function handleprotected () {
-     setIsprotected((prev) => !prev);
+  function handleprotected() {
+    setIsprotected((prev) => !prev);
   }
-
+  
   const handlejoinroom = async (e) => {
     try {
       if (e) e.preventDefault();
@@ -70,10 +69,11 @@ export default function HeroSection() {
 
       // 1. Fetch room details
       const { data, status } = await api.post("/room/api/getroom", { roomcode });
-      console.log(data,status)
+      console.log(data, status);
+
       if (status === 200) {
-        
-        // 2. ✅ Token Guard: Matches backend key definition 'protectedMode'
+
+        // 2. ✅ FIX: Read directly from data.protectedMode, not data.message.protectedMode
         if (data.message.protectedMode && !userid) {
           setError("This room is protected. You must be logged in to join.");
           return;
@@ -86,11 +86,12 @@ export default function HeroSection() {
               "/room/api/checkownerroom",
               { roomcode }
             );
-            if (checkownerroom.status === 200) {
+            console.log("checkownerroom", checkownerroom)
+            if (checkownerroom.data.isOwner == true) {
               dispatch(setRole("Owner"));
             }
           } catch (ownerErr) {
-            dispatch(setRole("Participant")); 
+            dispatch(setRole("Participant"));
           }
         }
 
@@ -103,7 +104,7 @@ export default function HeroSection() {
           setMessage("");
         }, 3000);
       }
-      
+
     } catch (err) {
       const errorMsg =
         err.response?.data?.message || "Failed to join room. Try again.";
@@ -139,6 +140,24 @@ export default function HeroSection() {
 
   return (
     <section className="min-h-screen bg-[#1a1a1a] flex items-center justify-center px-6">
+      
+        <div className="flex items-center justify-between w-full max-w-xs px-4 py-3 rounded-xl bg-[#242424] border border-white/5">
+          <div className="flex flex-col text-left">
+            <span className="text-sm font-medium text-[#e8e8e8]">Password Protection</span>
+            <span className="text-xs text-[#777]">Require room authentication</span>
+          </div>
+          <button
+            type="button"
+            onClick={handleprotected}
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${isprotected ? "bg-orange-500" : "bg-[#333]"
+              }`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isprotected ? "translate-x-5" : "translate-x-0"
+                }`}
+            />
+          </button>
+        </div>
       <div className="flex flex-col items-center text-center gap-7 max-w-lg w-full">
         {message && (
           <div className="px-3 py-2.5 rounded-xl bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-xs w-full max-w-xs">
@@ -171,26 +190,6 @@ export default function HeroSection() {
           </div>
         )}
 
-        {/* Toggle Button Container */}
-        <div className="flex items-center justify-between w-full max-w-xs px-4 py-3 rounded-xl bg-[#242424] border border-white/5">
-          <div className="flex flex-col text-left">
-            <span className="text-sm font-medium text-[#e8e8e8]">Password Protection</span>
-            <span className="text-xs text-[#777]">Require room authentication</span>
-          </div>
-          <button
-            type="button"
-            onClick={handleprotected}
-            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-              isprotected ? "bg-orange-500" : "bg-[#333]"
-            }`}
-          >
-            <span
-              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                isprotected ? "translate-x-5" : "translate-x-0"
-              }`}
-            />
-          </button>
-        </div>
 
         <button
           onClick={createRoom}
