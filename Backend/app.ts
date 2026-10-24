@@ -17,7 +17,7 @@ import { initChatServices } from "./modules/Room_modules/Room_controller.js";
 import helmet from "helmet";
 
 const host = process.env.HOST;
-const port = process.env.PORT_REDIS;
+const port  = process.env.PORT_REDIS;
 const password = process.env.PASSWORD;
 const app = express();
 const CLIENT_URI = process.env.CLIENT_URI;
@@ -32,7 +32,7 @@ export const io: any = new Server(server, {
 });
 app.use(
   cors({
-    origin: CLIENT_URI,
+    origin: "http://localhost:5173" ,
     methods: "GET,POST,PUT,DELETE",
     credentials: true,
   }),

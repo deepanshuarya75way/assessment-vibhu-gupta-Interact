@@ -11,14 +11,15 @@ import { encrypt, decrypt } from "../../utils/cryptoUtils.js";
 export const Createroom = async (req: Request, res: Response) => {
   try {
     const roomcode = await generateRandomLetters();
+    const { roomisprotected }  = req.body;
     const userId = req.user.id;
 
     const user = await userModel.findById(userId).select("-password -__v");
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
-
-    const room = await Room.create({ roomcode, host: user._id });
+   
+    const room = await Room.create({ roomcode, host: user._id ,protectedMode : roomisprotected });
     return res.status(201).json(room);
   } catch (err) {
     console.error("[Createroom]", err);

@@ -11,6 +11,7 @@ export default function HeroSection() {
   const [roomcode, setRoomcode] = useState("");
   const [message, setMessage] = useState("");
   const [showAskName, setShowAskName] = useState(false);
+  const [isprotected, setIsprotected] = useState(false);
   const [tempRoomcode, setTempRoomcode] = useState("");
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -28,7 +29,6 @@ export default function HeroSection() {
   }, [name, showAskName, tempRoomcode, navigate]);
 
   useEffect(() => {
-
      dispatch((setName(null)))
   } , [])
 
@@ -36,7 +36,7 @@ export default function HeroSection() {
     try {
       setError("");
       setLoading(true);
-      const { data } = await api.post("/room/api/createroom");
+      const { data } = await api.post("/room/api/createroom" , {isprotected});
       console.log(data);
       if (data.isActive == true) {
         dispatch(setRole("Owner"));
@@ -52,10 +52,14 @@ export default function HeroSection() {
     }
   };
 
+  // Fixed to toggle the true/false state instead of only setting it to true
+  function handleprotected () {
+     setIsprotected((prev) => !prev);
+  }
 
   const handlejoinroom = async (e) => {
     try {
-      e.preventDefault();
+      if (e) e.preventDefault(); // Fixed crash when triggered from Enter key press
       if(userid != null) {
        setError("");
 
@@ -75,7 +79,7 @@ export default function HeroSection() {
         setShowAskName(true);
       }
       }else { 
- const { status } = await api.post("/room/api/getroom", { roomcode });
+ const { status } = await api.post("/room/api/getroom", {roomisprotected : roomcode });
 
       if (status === 201 || status === 200) {
         setTempRoomcode(roomcode);
@@ -88,8 +92,6 @@ export default function HeroSection() {
       }
       }
       
-
-     
     } catch (err) {
       const errorMsg =
         err.response?.data?.message || "Failed to join room. Try again.";
@@ -157,6 +159,27 @@ export default function HeroSection() {
           </div>
         )}
 
+        {/* Toggle Button Container */}
+        <div className="flex items-center justify-between w-full max-w-xs px-4 py-3 rounded-xl bg-[#242424] border border-white/5">
+          <div className="flex flex-col text-left">
+            <span className="text-sm font-medium text-[#e8e8e8]">Password Protection</span>
+            <span className="text-xs text-[#777]">Require room authentication</span>
+          </div>
+          <button
+            type="button"
+            onClick={handleprotected}
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+              isprotected ? "bg-orange-500" : "bg-[#333]"
+            }`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                isprotected ? "translate-x-5" : "translate-x-0"
+              }`}
+            />
+          </button>
+        </div>
+
         <button
           onClick={createRoom}
           disabled={loading}
@@ -178,12 +201,12 @@ export default function HeroSection() {
         </button>
 
         <div className="flex items-center gap-3 w-full max-w-xs">
-          <div className="flex-1 h-px bg-white/8" />
+          <div className="flex-1 h-px bg-white/5" />
           <span className="text-[#444] text-xs tracking-widest">OR</span>
-          <div className="flex-1 h-px bg-white/8" />
+          <div className="flex-1 h-px bg-white/5" />
         </div>
 
-        <div className="flex items-center w-full max-w-xs rounded-xl bg-[#242424] border border-white/8 overflow-hidden focus-within:border-orange-500/40 focus-within:ring-1 focus-within:ring-orange-500/20 transition-all duration-150">
+        <div className="flex items-center w-full max-w-xs rounded-xl bg-[#242424] border border-white/5 overflow-hidden focus-within:border-orange-500/40 focus-within:ring-1 focus-within:ring-orange-500/20 transition-all duration-150">
           <div className="flex items-center gap-2 flex-1 px-4 py-3">
             <svg
               width="14"
@@ -220,7 +243,7 @@ export default function HeroSection() {
           </div>
           <button
             onClick={handlejoinroom}
-            className="px-4 py-3 text-sm font-semibold text-orange-400 hover:text-orange-300 hover:bg-orange-500/5 transition-colors duration-150 border-l border-white/8"
+            className="px-4 py-3 text-sm font-semibold text-orange-400 hover:text-orange-300 hover:bg-orange-500/5 transition-colors duration-150 border-l border-white/5"
           >
             Join
           </button>
@@ -230,23 +253,7 @@ export default function HeroSection() {
           No account needed to join a meeting.
         </p>
 
-        <div className="flex items-center gap-8 pt-2 border-t border-white/8 w-full max-w-xs justify-center">
-          {[
-            { value: "HD", label: "Video Quality" },
-            { value: "50+", label: "Participants" },
-            { value: "AI", label: "Powered" },
-          ].map((stat) => (
-            <div
-              key={stat.label}
-              className="flex flex-col items-center gap-0.5"
-            >
-              <span className="text-orange-400 text-sm font-bold">
-                {stat.value}
-              </span>
-              <span className="text-[#555] text-xs">{stat.label}</span>
-            </div>
-          ))}
-        </div>
+        <div className="flex items-center gap-8 pt-2 border-t border-white/5 w-full max-w-xs justify-center" />
       </div>
     </section>
   );

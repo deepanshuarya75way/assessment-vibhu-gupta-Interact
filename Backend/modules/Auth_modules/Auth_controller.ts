@@ -100,9 +100,9 @@ export const signin = async (req: Request, res: Response) => {
 export const logout = async (_req: Request, res: Response) => {
   try {
     res.clearCookie("token", {
-      httpOnly: true,
+     
       secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
+     
     });
     return res.status(200).json({ message: "Logged out successfully" });
   } catch (err) {

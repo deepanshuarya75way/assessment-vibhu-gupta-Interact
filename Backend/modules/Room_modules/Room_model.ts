@@ -1,9 +1,10 @@
 import mongoose, { Schema, Document, Types } from "mongoose";
+import { boolean } from "zod";
 
 export interface IRoom extends Document {
   roomcode: string;
   host: Types.ObjectId;
-
+  protectedMode : boolean;
   chat: {
     name: String;
     senderId: Types.ObjectId;
@@ -53,6 +54,11 @@ const roomSchema = new Schema<IRoom>({
     },
   ],
 
+     protectedMode : {
+     type : Boolean,
+     deafult : false,
+    
+  },
   isActive: {
     type: Boolean,
     default: true,

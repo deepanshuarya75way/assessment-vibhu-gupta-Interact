@@ -6,8 +6,9 @@ export default function SignUpPage() {
   const [form, setForm] = useState({ name: "", email: "", password: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  
   const navigate = useNavigate();
-const backendurl = import.meta.env.VITE_BACKEND_URI;
+  const backendurl = import.meta.env.VITE_BACKEND_URI;
 
   const handleChange = (e) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -28,7 +29,7 @@ const backendurl = import.meta.env.VITE_BACKEND_URI;
 
     try {
       setLoading(true);
-      await api.post("/auth/api/signup", { name, email, password });
+      await api.post("/auth/api/signup", { name , email  , password });
       navigate("/");
     } catch (err) {
       setError(
