@@ -113,13 +113,17 @@ export const Chat = forwardRef(function Chat(
       showStatus(`🚶 ${data.name} left`);
       onUserLeft?.(data);
     };
-
+const handleProtectionUpdated = (data) => {
+  setIsProtectedRoom(data.protectedMode);
+  showStatus(`🔒 Room status changed to: ${data.protectedMode ? "Protected" : "Open"}`);
+};
     const handleReceiveMessage = (data) => {
       if (data.name === name) return;
       setMessages((prev) => [...prev, normalizeMessage(data, name)]);
     };
 
     socket.on("newjoinreq", handleNewJoinReq);
+    socket.on("room-protection-updated", handleProtectionUpdated);
     socket.on("userJoined", handleUserJoined);
     socket.on("userLeft", handleUserLeft);
     socket.on("receive-message", handleReceiveMessage);
@@ -129,10 +133,36 @@ export const Chat = forwardRef(function Chat(
       socket.off("userJoined", handleUserJoined);
       socket.off("userLeft", handleUserLeft);
       socket.off("receive-message", handleReceiveMessage);
+        socket.off("room-protection-updated", handleProtectionUpdated);
     };
   }, [name, onNewJoinRequest, onUserJoined, onUserLeft]);
 
   // ── Fetch chat history ────────────────────────────────────────────────────
+useEffect(() => {
+  if (!room) return;
+
+  const fetchChatsAndStatus = async () => {
+    try {
+      setIsFetching(true);
+      
+      // <-- ADD THIS ROOM STATUS FETCH BLOCK
+      const roomRes = await api.post("/room/api/getroom", { roomcode: room });
+      if (roomRes.status === 200) {
+        setIsProtectedRoom(roomRes.data.protectedMode || false);
+      }
+
+      const { data } = await api.get(`/room/api/getchat/${room}`);
+      const normalized = data.chat.map((msg) => normalizeMessage(msg, name));
+      setMessages(normalized);
+    } catch (err) {
+      console.error("[Chat] Failed to load initialization details:", err);
+    } finally {
+      setIsFetching(false);
+    }
+  };
+
+  fetchChatsAndStatus();
+}, [room, name]);
 
   useEffect(() => {
     if (!room) return;
@@ -216,36 +246,43 @@ export const Chat = forwardRef(function Chat(
   return (
     <div className="flex flex-col h-full bg-gradient-to-b from-[#1a1a1a] to-[#121212] relative">
         <div className="flex items-center justify-between px-4 py-3 bg-[#1e1e1e] border-b border-white/5 z-10">
-        <div className="flex flex-col">
-          <span className="text-xs text-gray-500 font-mono">ROOM CODE</span>
-          <span className="text-sm font-semibold text-gray-200 tracking-wide">{room}</span>
-        </div>
+  <div className="flex flex-col">
+    <span className="text-xs text-gray-500 font-mono">ROOM CODE</span>
+    <span className="text-sm font-semibold text-gray-200 tracking-wide">{room}</span>
+  </div>
 
-        {role === "Owner" ? (
-          <div className="flex items-center gap-3 bg-[#242424] px-3 py-1.5 rounded-xl border border-white/5">
-            <span className="text-xs text-gray-300 font-medium">Room Protected</span>
-            <button
-              type="button"
-              onClick={handleToggleProtection}
-              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${isProtectedRoom ? "bg-orange-500" : "bg-[#333]"
-                }`}
-            >
-              <span
-                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition duration-200 ease-in-out ${isProtectedRoom ? "translate-x-4" : "translate-x-0"
-                  }`}
-              />
-            </button>
-          </div>
-        ) : (
-          <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${isProtectedRoom
-              ? "bg-orange-500/10 border-orange-500/20 text-orange-400"
-              : "bg-white/5 border-white/5 text-gray-400"
-            }`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${isProtectedRoom ? "bg-orange-400 animate-pulse" : "bg-gray-500"}`} />
-            {isProtectedRoom ? "Protected Mode ON" : "Open Room"}
-          </div>
-        )}
-      </div>
+  {role === "Owner" ? (
+    <div className="flex items-center gap-3 bg-[#242424] px-3 py-1.5 rounded-xl border border-white/5">
+      <span className="text-xs text-gray-300 font-medium">Room Protected</span>
+      <button
+        type="button"
+        onClick={handleToggleProtection}
+        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+          isProtectedRoom ? "bg-orange-500" : "bg-[#333]"
+        }`}
+      >
+        <span
+          className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition duration-200 ease-in-out ${
+            isProtectedRoom ? "translate-x-4" : "translate-x-0"
+          }`}
+        />
+      </button>
+    </div>
+  ) : (
+    /* Participant viewing layout tag */
+    <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-colors duration-300 ${
+      isProtectedRoom
+        ? "bg-orange-500/10 border-orange-500/20 text-orange-400"
+        : "bg-white/5 border-white/5 text-gray-400"
+    }`}>
+      <span className={`w-1.5 h-1.5 rounded-full transition-colors duration-300 ${
+        isProtectedRoom ? "bg-orange-400 animate-pulse" : "bg-gray-500"
+      }`} />
+      {isProtectedRoom ? "Protected Mode ON" : "Open Room"}
+    </div>
+  )}
+</div>
+
       {/* Status Banner */}
       {statusMessage && (
         <div className="absolute top-16 left-0 right-0 z-20 flex justify-center pointer-events-none">
