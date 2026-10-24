@@ -11,6 +11,7 @@ export default function HeroSection() {
   const [roomcode, setRoomcode] = useState("");
   const [message, setMessage] = useState("");
   const [showAskName, setShowAskName] = useState(false);
+  
   const [isprotected, setIsprotected] = useState(false);
   const [tempRoomcode, setTempRoomcode] = useState("");
   const dispatch = useDispatch();
@@ -36,9 +37,10 @@ export default function HeroSection() {
     try {
       setError("");
       setLoading(true);
-      const { data } = await api.post("/room/api/createroom" , {isprotected});
-      console.log(data);
-      if (data.isActive == true) {
+      // ✅ Matches backend destructured variable key: roomisprotected
+      const { data } = await api.post("/room/api/createroom" , { roomisprotected: isprotected });
+      
+      if (data.isActive === true) {
         dispatch(setRole("Owner"));
       }
       setTempRoomcode(data.roomcode);
@@ -52,44 +54,54 @@ export default function HeroSection() {
     }
   };
 
-  // Fixed to toggle the true/false state instead of only setting it to true
   function handleprotected () {
      setIsprotected((prev) => !prev);
   }
 
   const handlejoinroom = async (e) => {
     try {
-      if (e) e.preventDefault(); // Fixed crash when triggered from Enter key press
-      if(userid != null) {
-       setError("");
+      if (e) e.preventDefault();
+      setError("");
 
       if (!roomcode.trim()) {
         setError("Please enter a room code.");
         return;
       }
-      const checkownerroom = await api.post(
-        "/room/api/checkownerroom",
-        { roomcode },
-        Credential,
-      );
-      console.log(checkownerroom)
-      if (checkownerroom.status == 200) {
-        dispatch(setRole("Owner"));
-        setTempRoomcode(roomcode);
-        setShowAskName(true);
-      }
-      }else { 
- const { status } = await api.post("/room/api/getroom", {roomisprotected : roomcode });
 
-      if (status === 201 || status === 200) {
+      // 1. Fetch room details
+      const { data, status } = await api.post("/room/api/getroom", { roomcode });
+      console.log(data,status)
+      if (status === 200) {
+        
+        // 2. ✅ Token Guard: Matches backend key definition 'protectedMode'
+        if (data.message.protectedMode && !userid) {
+          setError("This room is protected. You must be logged in to join.");
+          return;
+        }
+
+        // 3. Check if current user is the owner
+        if (userid != null) {
+          try {
+            const checkownerroom = await api.post(
+              "/room/api/checkownerroom",
+              { roomcode }
+            );
+            if (checkownerroom.status === 200) {
+              dispatch(setRole("Owner"));
+            }
+          } catch (ownerErr) {
+            dispatch(setRole("Participant")); 
+          }
+        }
+
         setTempRoomcode(roomcode);
         setShowAskName(true);
+
       } else {
         setMessage("Room not found");
         setTimeout(() => {
           setMessage("");
         }, 3000);
-      }
       }
       
     } catch (err) {

@@ -12,6 +12,7 @@ export const Createroom = async (req: Request, res: Response) => {
   try {
     const roomcode = await generateRandomLetters();
     const { roomisprotected }  = req.body;
+    
     const userId = req.user.id;
 
     const user = await userModel.findById(userId).select("-password -__v");
@@ -20,6 +21,7 @@ export const Createroom = async (req: Request, res: Response) => {
     }
    
     const room = await Room.create({ roomcode, host: user._id ,protectedMode : roomisprotected });
+    console.log(room)
     return res.status(201).json(room);
   } catch (err) {
     console.error("[Createroom]", err);
@@ -35,12 +37,13 @@ export const getroom = async (req: Request, res: Response) => {
     }
 
     const findroom = await Room.findOne({ roomcode });
+    console.log(findroom)
     if (!findroom) {
       return res.status(404).json({ message: "Room not found" });
     }
-
+   console.log(findroom)
     // ✅ 200 on GET, not 201
-    return res.status(200).json({ message: "Room found" });
+    return res.status(200).json({message : findroom});
   } catch (err) {
     console.error("[getroom]", err);
     return res.status(500).json({ message: "Error finding room" });
@@ -68,7 +71,8 @@ export const checkownerroom = async (req: Request, res: Response) => {
     const isOwner = findroom.host.toString() === userid.toString();
 
     // ✅ Dono cases handle kiye
-    return res.status(200).json({ isOwner });
+    
+    return res.status(200).json({ isOwner});
   } catch (err) {
     console.error("[checkownerroom]", err);
     return res.status(500).json({ message: "Error checking room owner" });
@@ -259,3 +263,6 @@ export const getchat = async (req: Request, res: Response) => {
     return res.status(500).json({ message: "Error fetching chat" });
   }
 };
+
+
+//kjjGSSkWJI

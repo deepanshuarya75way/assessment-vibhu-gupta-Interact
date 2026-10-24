@@ -1,16 +1,15 @@
 import mongoose, { Schema, Document, Types } from "mongoose";
-import { boolean } from "zod";
 
 export interface IRoom extends Document {
   roomcode: string;
   host: Types.ObjectId;
-  protectedMode : boolean;
+  protectedMode: boolean;
   chat: {
     name: String;
     senderId: Types.ObjectId;
     chat: String;
     time: Date;
-    role : String;
+    role: String;
   }[];
   isActive: boolean;
   createdAt: Date;
@@ -29,7 +28,12 @@ const roomSchema = new Schema<IRoom>({
     ref: "User",
     required: true,
   },
-
+  
+  protectedMode: {
+    type: Boolean,
+    default: false, 
+  },
+  
   chat: [
     {
       name: {
@@ -48,17 +52,12 @@ const roomSchema = new Schema<IRoom>({
         type: Date,
         default: Date.now,
       },
-      role : {
-        type : String
+      role: {
+        type: String
       },
     },
   ],
 
-     protectedMode : {
-     type : Boolean,
-     deafult : false,
-    
-  },
   isActive: {
     type: Boolean,
     default: true,
