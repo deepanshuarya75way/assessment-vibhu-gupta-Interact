@@ -32,6 +32,31 @@ export function socketcontroller(io: any) {
       io.to(data.roomcode).emit("users-update", roomUsers[data.roomcode]);
       console.log("Owner joined:", socket.id, roomUsers[data.roomcode]);
     });
+    // ── Room management ─────────────────────────────────────────────────────
+    
+    // ✅ CHAT APPS KA JOIN EVENT (Ise yaha paste krein)
+    socket.on("join-room-chat", (data: any) => {
+      const { room, name, userId } = data;
+      socket.join(room);
+      socket.roomcode = room;
+      socket.name = name;
+
+      if (!roomUsers[room]) roomUsers[room] = [];
+
+      // Duplicate filtering socket connection context ke basis pr
+      const alreadyExists = roomUsers[room].find((u) => u.userId === socket.id);
+      if (!alreadyExists) {
+        roomUsers[room].push({
+          name: name,
+          role: socket.role || "Participant",
+          userId: socket.id, // Frontend tracking mapping structure ke liye socket id zaroori hai
+        });
+      }
+
+      // Dono channel paths par update emit karein taaki sync bar theek chale
+      io.to(room).emit("room-users-list", roomUsers[room]); // For Chat list dropdown
+      io.to(room).emit("users-update", roomUsers[room]);    // For Video component wall grid
+    });
 
     socket.on("user-join-request", (data: any) => {
       socket.roomcode = data.roomcode;
@@ -148,6 +173,11 @@ socket.on("toggle-room-protection", (data) => {
     console.error("[Socket Event Error: toggle-room-protection]", err);
   }
 });
+// Inside your io.on("connection", (socket) => { ... }) block
+socket.on("kick-user", ({ room, targetSocketId }) => {
+  // Target the specific user's socket and force them out
+  io.to(targetSocketId).emit("you-are-kicked");
+});
 
     socket.on("rejectJoinRequest", (data: any) => {
       io.to(data.userId).emit("requestRejected");
@@ -202,3 +232,33 @@ socket.on("toggle-room-protection", (data) => {
     });
   });
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

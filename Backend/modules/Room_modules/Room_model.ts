@@ -11,6 +11,8 @@ export interface IRoom extends Document {
     time: Date;
     role: String;
   }[];
+  
+bannedUsers: Types.ObjectId[];
   isActive: boolean;
   createdAt: Date;
 }
@@ -57,6 +59,13 @@ const roomSchema = new Schema<IRoom>({
       },
     },
   ],
+// Inside your Mongoose Room Schema definition file
+bannedUsers: [
+  {
+    type: String, // ✅ Changed from Schema.Types.ObjectId to String
+    trim: true
+  }
+],
 
   isActive: {
     type: Boolean,

@@ -35,12 +35,19 @@ export const getroom = async (req: Request, res: Response) => {
     if (!roomcode) {
       return res.status(400).json({ message: "roomcode is required" });
     }
+   // Inside your getroom / join validation controller
+const userId = req.user?.id; // Or however you get the joining user's ID
+
+
 
     const findroom = await Room.findOne({ roomcode });
     console.log(findroom)
     if (!findroom) {
       return res.status(404).json({ message: "Room not found" });
     }
+    if (findroom.bannedUsers.includes(userId)) {
+  return res.status(403).json({ message: "You have been permanently banned from this room." });
+}
    console.log(findroom)
     // ✅ 200 on GET, not 201
     return res.status(200).json({message : findroom});
@@ -304,4 +311,29 @@ export const updateRoomProtection = async (req: Request, res: Response) => {
   }
 };
 
-//kjjGSSkWJI
+
+export const banUserFromRoom = async (req, res) => {
+  try {
+    console.log("hey")
+    const { roomcode } = req.params;
+    const { targetUserId } = req.body;
+    const hostId = req.user.id; // Populated correctly by your authMiddleware decoded token
+
+    const room = await Room.findOne({ roomcode });
+    if (!room) return res.status(404).json({ message: "Room not found" });
+
+    if (room.host.toString() !== hostId) {
+      return res.status(403).json({ message: "Unauthorized: Only the host can ban users" });
+    }
+
+    if (!room.bannedUsers.includes(targetUserId)) {
+      room.bannedUsers.push(targetUserId);
+      await room.save();
+    }
+
+    return res.status(200).json({ message: "User permanently banned" });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: "Error banning user" });
+  }
+};
